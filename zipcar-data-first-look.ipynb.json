@@ -1,0 +1,1405 @@
+{
+ "metadata": {
+  "name": "",
+  "signature": "sha256:773a1ab4c74263ffeb49fc50739490528cd5b023a203e8956a5df23018673906"
+ },
+ "nbformat": 3,
+ "nbformat_minor": 0,
+ "worksheets": [
+  {
+   "cells": [
+    {
+     "cell_type": "heading",
+     "level": 1,
+     "metadata": {},
+     "source": [
+      "A First Look at the Zip Car Data Set"
+     ]
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "**Summary**: Zip Car performance, measured by \"Miles driven per Zip Car\" and \"Miles driven per member\" have lots of variance across different ZIP codes. That means we have a good problem to solve: **What characteristics of a community predict the differences in ZipCar's performance there?**\n",
+      "\n",
+      "At the datathon, we got ZIP code-level data every quarter from ZipCar that included:\n",
+      "\n",
+      "- Members per ZIP Code\n",
+      "- Vehicles per ZIP Code\n",
+      "- Total Miles driven by vehicles based in a ZIP Code\n",
+      "\n",
+      "If we want to develop a model that predicts how well Zip Cars will perform in different parts of the state, we certainly hope that our data displays variance in Zip Car performance. In other words, if every Zip Car in the state was used exactly the same amount, and every Zip Car member drove the same number of miles, we could only predict that that some performance would be seen everywhere else in MA, too. That would be a super boring web app! So first I wanted to check out whether Zip Car performance was variable based on location."
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "import numpy as np\n",
+      "import os\n",
+      "import pandas as pd\n",
+      "import matplotlib.pyplot as plt\n",
+      "from datetime import time\n",
+      "pd.set_option('html', False)\n",
+      "\n",
+      "%matplotlib inline"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [],
+     "prompt_number": 1
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "So I've set up iPython to use Pandas, MatPlotLib, and to display charts right in the web browser. Now, I'm just going to import the data."
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_car_performance = pd.read_csv('zipcar_data.csv',\n",
+      "                                  index_col=False,\n",
+      "                                  dtype={'zip_code': np.str},\n",
+      "                                  usecols=[0, 1, 2, 3, 4])\n",
+      "zip_car_performance.head()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 2,
+       "text": [
+        "  zip_code  quarter  zcar_mem  zcar_mi  zcar_veh\n",
+        "0    01001  2008_Q1         2        0         0\n",
+        "1    01001  2008_Q2         2        0         0\n",
+        "2    01001  2008_Q3         2        0         0\n",
+        "3    01001  2008_Q4         1        0         0\n",
+        "4    01001  2009_Q1         1        0         0"
+       ]
+      }
+     ],
+     "prompt_number": 2
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Rows in the ZipCar dataset:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "len(zip_car_performance.index)"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 3,
+       "text": [
+        "16512"
+       ]
+      }
+     ],
+     "prompt_number": 3
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Let's checkout what time periods we have data for."
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_car_performance.quarter.unique()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 4,
+       "text": [
+        "array(['2008_Q1', '2008_Q2', '2008_Q3', '2008_Q4', '2009_Q1', '2009_Q2',\n",
+        "       '2009_Q3', '2009_Q4', '2010_Q1', '2010_Q2', '2010_Q3', '2010_Q4',\n",
+        "       '2011_Q1', '2011_Q2', '2011_Q3', '2011_Q4', '2012_Q1', '2012_Q2',\n",
+        "       '2012_Q3', '2012_Q4', '2013_Q1', '2013_Q2', '2013_Q3', '2013_Q4'], dtype=object)"
+       ]
+      }
+     ],
+     "prompt_number": 4
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "The latest data we have is for Q4 2013. Let's create a new dataset including only Q4 2013 data, and including ZIP codes where either number of members (`zcar_mem`), miles driven (`zcar_mi`), or number of vehicles (`zcar_veh`) is non-zero."
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest = zip_car_performance[zip_car_performance['quarter'] == '2013_Q4']\n",
+      "zc_latest = zc_latest[(zc_latest.zcar_mem >0) | (zc_latest.zcar_mi > 0) | (zc_latest.zcar_veh > 0)]\n",
+      "zc_latest.head()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 5,
+       "text": [
+        "    zip_code  quarter  zcar_mem   zcar_mi  zcar_veh\n",
+        "23     01001  2013_Q4         2      0.00         0\n",
+        "47     01002  2013_Q4       611  33625.86         2\n",
+        "71     01003  2013_Q4       139  41330.15         3\n",
+        "95     01004  2013_Q4         2      0.00         0\n",
+        "119    01005  2013_Q4         1      0.00         0"
+       ]
+      }
+     ],
+     "prompt_number": 5
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "We've narrowed down the dataset to just a few rows:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "len(zc_latest.index)"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 6,
+       "text": [
+        "421"
+       ]
+      }
+     ],
+     "prompt_number": 6
+    },
+    {
+     "cell_type": "heading",
+     "level": 3,
+     "metadata": {},
+     "source": [
+      "Miles Driven per Zip Car"
+     ]
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "OK, now that we have narrowed down the zip car data to just the last quarter, we can start looking at it. First, let's see number of vehicles vs. how many miles were driven:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest.plot(x='zcar_veh', y='zcar_mi', kind='scatter')\n",
+      "plt.show()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "display_data",
+       "png": "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\n",
+       "text": [
+        "<matplotlib.figure.Figure at 0x1051c4dd0>"
+       ]
+      }
+     ],
+     "prompt_number": 7
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Good news! Total number of miles driven totally depends on number of available vehicles, but there is still a ton of variation. For example, in all ZIP codes where 3 vehicles was installed in Q4 2013, number of total miles driven varies from 17,500 up to 58,500 miles:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest[zc_latest.zcar_veh == 3].zcar_mi.describe()\n"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 8,
+       "text": [
+        "count        7.000000\n",
+        "mean     34956.604286\n",
+        "std      14826.656652\n",
+        "min      17591.200000\n",
+        "25%      22468.460000\n",
+        "50%      38927.880000\n",
+        "75%      42385.440000\n",
+        "max      58469.350000\n",
+        "dtype: float64"
+       ]
+      }
+     ],
+     "prompt_number": 8
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Let's create a new column, \"Average miles per vehicle\""
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest[\"zcar_mi_avg\"] = zc_latest.zcar_mi/zc_latest.zcar_veh\n",
+      "zc_latest.loc[zc_latest.zcar_mi_avg == np.inf, 'zcar_mi_avg'] = np.nan\n",
+      "zc_latest.zcar_mi_avg.describe()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 9,
+       "text": [
+        "count       72.000000\n",
+        "mean     15215.102969\n",
+        "std       9766.934194\n",
+        "min       3730.840000\n",
+        "25%       9161.777500\n",
+        "50%      12952.797000\n",
+        "75%      17870.826964\n",
+        "max      72156.230000\n",
+        "dtype: float64"
+       ]
+      }
+     ],
+     "prompt_number": 9
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "So looking at all ZIP codes that had cars installed in Q4 2013, the average mileage driven per car varies from just 3730 miles all the way up to 72,156 miles per vehicle. Even disregarding outliers, the average 50% of ZIP codes varies by 100%: from 9161 miles per car up to 17870 miles! _This gives us great motivation for developing our prediction model: what is it about certain communities that causes these variations in ZipCar utilization?_"
+     ]
+    },
+    {
+     "cell_type": "heading",
+     "level": 3,
+     "metadata": {},
+     "source": [
+      "Miles Driven per Member"
+     ]
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Now, let's talk members. First question: how many members live in a zip code that has vehicles available, versus no vehicles?"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest[zc_latest.zcar_veh > 0].zcar_mem.sum()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 10,
+       "text": [
+        "74130"
+       ]
+      }
+     ],
+     "prompt_number": 10
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest[zc_latest.zcar_veh == 0].zcar_mem.sum()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 11,
+       "text": [
+        "5040"
+       ]
+      }
+     ],
+     "prompt_number": 11
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "So. In Q4 2013, ZipCar had 79170 members, 94% of whom lived in a ZIP that had a ZipCar. The vast majority of ZipCar members live in a ZipCode with a Zip Car. Let's assume for a moment that a member predominantly uses the cars in her own ZIP code. In that case, how does the number of miles per member vary?"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest.plot(x='zcar_mem', y='zcar_mi', kind='scatter')\n",
+      "plt.show()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "display_data",
+       "png": "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\n",
+       "text": [
+        "<matplotlib.figure.Figure at 0x1058930d0>"
+       ]
+      }
+     ],
+     "prompt_number": 12
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest[\"zcar_mi_per_mem\"] = zc_latest.zcar_mi/zc_latest.zcar_mem\n",
+      "zc_latest.loc[zc_latest.zcar_mi_per_mem == np.inf, \"zcar_mi_per_mem\"] = np.nan\n",
+      "zc_latest.loc[zc_latest.zcar_veh == 0, \"zcar_mi_per_mem\"] = np.nan\n",
+      "zc_latest.zcar_mi_per_mem.describe()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 13,
+       "text": [
+        "count      71.000000\n",
+        "mean      179.816633\n",
+        "std       329.981338\n",
+        "min         8.676636\n",
+        "25%        61.648792\n",
+        "50%        79.696305\n",
+        "75%       139.289766\n",
+        "max      2162.791667\n",
+        "dtype: float64"
+       ]
+      }
+     ],
+     "prompt_number": 13
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "So now we have a new column, `zc_latest.zcar_mi_per_mem`, that describes the average miles driven by member. Here were see that on average, a ZipCar member drives 180 miles per quarter (this average is skewed high because we didn't include the 6% of members that don't have a car in their ZIP) but, just like with miles per vehicle, we've got high variance: the middle 50% of ZIP codes vary more than 100%, from 60 miles per member to 140 miles per member. **What community charateristics make some members use ZipCar twice as much as others?**"
+     ]
+    },
+    {
+     "cell_type": "heading",
+     "level": 1,
+     "metadata": {},
+     "source": [
+      "ZipCar Locations"
+     ]
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "The fantastic ZipCar dataset we received at the Datathon gives us some really great utilization data for ZipCars in Massachusetts, but it only ZIP Code-level spatial resolution. On the other hand, the MA Vehicle Census contains information about driving behavior resolved on a 250m grid! If we want to take full advantage of the Vehicle Census to model ZipCar utilization, we really need to know where, exactly, those ZIP Cars are located. \n",
+      "\n",
+      "After spending some quality time with my favorite browser console, I was able to scrape the current list of all ZipCar locations in Massachusetts, as of Q1 2014. Since ZipCar hasn't published how to access this data, I'm not going to show you how I did it, or provide the dataset I recovered. But here is a peak at what the raw data looks like:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_car_locations = pd.read_csv('ZipCarLocations.csv',\n",
+      "                                  index_col='locationId',\n",
+      "                                  dtype={'zip_code': np.str},\n",
+      "                                  usecols=[0, 1, 2, 3, 4, 7])\n",
+      "zip_car_locations.head()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 14,
+       "text": [
+        "                               description  hasVans   latitude  longitude  \\\n",
+        "locationId                                                                  \n",
+        "49271126                       Riverside T        0  42.336709 -71.253054   \n",
+        "1262234042             Watch Factory Lofts        0  42.368277 -71.241841   \n",
+        "49271012                        Woodland T        0  42.332116 -71.241346   \n",
+        "391795896       Archstone Cronin's Landing        0  42.371949 -71.237892   \n",
+        "1053595252  64 Pine St/Donovan's Alignment        0  42.371203 -71.233723   \n",
+        "\n",
+        "            vehicleCount  \n",
+        "locationId                \n",
+        "49271126               2  \n",
+        "1262234042             2  \n",
+        "49271012               2  \n",
+        "391795896              2  \n",
+        "1053595252             1  "
+       ]
+      }
+     ],
+     "prompt_number": 14
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "The first problem (or challenge!) to notice is that these ZipCar locations do not come with their enclosing ZIP Code. The second is that there are way more vehicles in `zip_car_locations` than there are in `zip_car_performance`:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_car_locations.vehicleCount.sum()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 15,
+       "text": [
+        "862"
+       ]
+      }
+     ],
+     "prompt_number": 15
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zc_latest.zcar_veh.sum()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 16,
+       "text": [
+        "411"
+       ]
+      }
+     ],
+     "prompt_number": 16
+    },
+    {
+     "cell_type": "heading",
+     "level": 2,
+     "metadata": {},
+     "source": [
+      "Assigning ZIP Codes"
+     ]
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Our first task to merge the set of ZipCar locations with the `zip_car_performance` dataset is to assign a ZIP code to every ZipCar location. Since `zip_car_locations` contains lat/lng coordinates to define a location, we first need to get a dataset that defines most ZIP codes in terms of their coordinates. The U.S. Census Bureau provides a ton of geospatial datasets, including the one we need:\n",
+      "\n",
+      "[2013 ZIP Code Boundaries](http://www2.census.gov/geo/tiger/TIGER2013/ZCTA5/tl_2013_us_zcta510.zip) (**Warning:** 500+ MB download) \n",
+      "\n",
+      "P.S. [Not all ZIP Codes are areas!](http://gis.stackexchange.com/a/2693) Some ZIPs define a single Post Office location, or a mail route.\n",
+      "\n",
+      "To start, let's add a new column to the `zip_car_locations` dataset to store matched ZIP Codes:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_car_locations['zip_code'] = pd.Series(np.str, index=zip_car_locations.index)\n",
+      "zip_car_locations.head()"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 17,
+       "text": [
+        "                               description  hasVans   latitude  longitude  \\\n",
+        "locationId                                                                  \n",
+        "49271126                       Riverside T        0  42.336709 -71.253054   \n",
+        "1262234042             Watch Factory Lofts        0  42.368277 -71.241841   \n",
+        "49271012                        Woodland T        0  42.332116 -71.241346   \n",
+        "391795896       Archstone Cronin's Landing        0  42.371949 -71.237892   \n",
+        "1053595252  64 Pine St/Donovan's Alignment        0  42.371203 -71.233723   \n",
+        "\n",
+        "            vehicleCount      zip_code  \n",
+        "locationId                              \n",
+        "49271126               2  <type 'str'>  \n",
+        "1262234042             2  <type 'str'>  \n",
+        "49271012               2  <type 'str'>  \n",
+        "391795896              2  <type 'str'>  \n",
+        "1053595252             1  <type 'str'>  "
+       ]
+      }
+     ],
+     "prompt_number": 17
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Next up, we need to load some libraries that will allow us to manipulate geographic data. [Shapely](http://toblerity.org/shapely) and [Fiona](http://toblerity.org/fiona) are fantastic geospatial tools. Fiona imports lots of geospatial file formats into highly regular, Pythonic data structures, and Shapely is used to do geographic calculations (formally, \"set-theoretic analysis and manipulation of planar features\" ) on those data structures. "
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "import shapely, shapely.geometry, fiona"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [],
+     "prompt_number": 18
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Load the lat/lng of every ZipCar location as a Shapely Point object."
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_car_points = {}\n",
+      "\n",
+      "for location in zip_car_locations.index:\n",
+      "    zip_car_record = zip_car_locations.loc[location]\n",
+      "    zip_car_points[location] = shapely.geometry.Point(zip_car_record.longitude , \n",
+      "                                                      zip_car_record.latitude)"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [],
+     "prompt_number": 19
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Use Fiona to load the ZIP Code Shapefile loaded above into Python."
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_code_shapefile = fiona.open('tl_2013_us_zcta510')"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [],
+     "prompt_number": 38
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Fiona represents geographic data as a collection of shapes such as points, lines, and polygons. Since this file represents ZIP Code *areas*, we expect most of the shapes in it to be polygons. Our plan is to loop over each shape in the file, and determine whether any of the `zip_car_points` we created above fall into a given polygon. Let's check look at the structure of one of these shapes represented by Fiona: "
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_code_shapefile[0]"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 39,
+       "text": [
+        "{'geometry': {'coordinates': [[(-83.625078, 41.341719),\n",
+        "    (-83.62468, 41.341712),\n",
+        "    (-83.62471, 41.34159),\n",
+        "    (-83.624741, 41.341463),\n",
+        "    (-83.625019, 41.340333),\n",
+        "    (-83.62521799999999, 41.339399),\n",
+        "    (-83.625339, 41.338729),\n",
+        "    (-83.625436, 41.338102),\n",
+        "    (-83.62555499999999, 41.33707),\n",
+        "    (-83.62557799999999, 41.336800000000004),\n",
+        "    (-83.62558299999999, 41.336757999999996),\n",
+        "    (-83.62558899999999, 41.336712),\n",
+        "    (-83.62561699999999, 41.336351),\n",
+        "    (-83.625655, 41.335676),\n",
+        "    (-83.62572899999999, 41.333194),\n",
+        "    (-83.625855, 41.328517),\n",
+        "    (-83.625941, 41.325644),\n",
+        "    (-83.622486, 41.325644),\n",
+        "    (-83.62198599999999, 41.325647),\n",
+        "    (-83.62171, 41.325648),\n",
+        "    (-83.620707, 41.325646),\n",
+        "    (-83.619462, 41.325658999999995),\n",
+        "    (-83.61693199999999, 41.325686),\n",
+        "    (-83.614001, 41.325705),\n",
+        "    (-83.61109499999999, 41.325722999999996),\n",
+        "    (-83.61108999999999, 41.32613),\n",
+        "    (-83.61101699999999, 41.328654),\n",
+        "    (-83.61100499999999, 41.329253),\n",
+        "    (-83.610978, 41.330638),\n",
+        "    (-83.61094, 41.332982),\n",
+        "    (-83.610934, 41.334469999999996),\n",
+        "    (-83.610913, 41.335732),\n",
+        "    (-83.61088099999999, 41.3397),\n",
+        "    (-83.61089799999999, 41.340556),\n",
+        "    (-83.61088, 41.341277999999996),\n",
+        "    (-83.610877, 41.341317),\n",
+        "    (-83.610858, 41.341587),\n",
+        "    (-83.610413, 41.341589),\n",
+        "    (-83.60663799999999, 41.341569),\n",
+        "    (-83.606287, 41.341567),\n",
+        "    (-83.60437999999999, 41.34156),\n",
+        "    (-83.600556, 41.341539),\n",
+        "    (-83.597145, 41.34153),\n",
+        "    (-83.59522299999999, 41.341528),\n",
+        "    (-83.593497, 41.341525),\n",
+        "    (-83.593148, 41.341525),\n",
+        "    (-83.59183399999999, 41.341529),\n",
+        "    (-83.591685, 41.341525999999995),\n",
+        "    (-83.591656, 41.341477),\n",
+        "    (-83.591606, 41.341325999999995),\n",
+        "    (-83.591594, 41.341251),\n",
+        "    (-83.59157499999999, 41.341139),\n",
+        "    (-83.59155899999999, 41.340959),\n",
+        "    (-83.59154699999999, 41.340598),\n",
+        "    (-83.591562, 41.338573),\n",
+        "    (-83.59156399999999, 41.337365),\n",
+        "    (-83.591548, 41.333903),\n",
+        "    (-83.591555, 41.333318999999996),\n",
+        "    (-83.591578, 41.332825),\n",
+        "    (-83.591644, 41.329496),\n",
+        "    (-83.591717, 41.327605999999996),\n",
+        "    (-83.59177299999999, 41.325809),\n",
+        "    (-83.590415, 41.325813),\n",
+        "    (-83.586891, 41.325834),\n",
+        "    (-83.58575599999999, 41.325828),\n",
+        "    (-83.583726, 41.325838999999995),\n",
+        "    (-83.582909, 41.325845),\n",
+        "    (-83.581632, 41.327293),\n",
+        "    (-83.580995, 41.328208),\n",
+        "    (-83.58050999999999, 41.32862),\n",
+        "    (-83.579782, 41.328986),\n",
+        "    (-83.578599, 41.329305999999995),\n",
+        "    (-83.57766, 41.329786999999996),\n",
+        "    (-83.575385, 41.331274),\n",
+        "    (-83.574263, 41.332097999999995),\n",
+        "    (-83.573565, 41.332372),\n",
+        "    (-83.572347, 41.33274),\n",
+        "    (-83.572347, 41.332755999999996),\n",
+        "    (-83.572311, 41.333779),\n",
+        "    (-83.57229699999999, 41.335257999999996),\n",
+        "    (-83.572267, 41.338417),\n",
+        "    (-83.572278, 41.340081),\n",
+        "    (-83.572268, 41.341204999999995),\n",
+        "    (-83.572265, 41.341501),\n",
+        "    (-83.560829, 41.341418999999995),\n",
+        "    (-83.55873799999999, 41.341412999999996),\n",
+        "    (-83.55829299999999, 41.341409),\n",
+        "    (-83.55342499999999, 41.341369),\n",
+        "    (-83.55302499999999, 41.341367),\n",
+        "    (-83.550316, 41.341339),\n",
+        "    (-83.549002, 41.341301),\n",
+        "    (-83.546553, 41.34127),\n",
+        "    (-83.546196, 41.341271),\n",
+        "    (-83.54614099999999, 41.341287),\n",
+        "    (-83.546089, 41.341311),\n",
+        "    (-83.546043, 41.341339),\n",
+        "    (-83.545963, 41.341404999999995),\n",
+        "    (-83.545862, 41.341516999999996),\n",
+        "    (-83.544088, 41.34377),\n",
+        "    (-83.543741, 41.344192),\n",
+        "    (-83.543629, 41.344350999999996),\n",
+        "    (-83.543584, 41.344435),\n",
+        "    (-83.543567, 41.344477999999995),\n",
+        "    (-83.54354, 41.344606),\n",
+        "    (-83.54352999999999, 41.344786),\n",
+        "    (-83.543517, 41.345461),\n",
+        "    (-83.543441, 41.347984),\n",
+        "    (-83.543419, 41.348580999999996),\n",
+        "    (-83.54336099999999, 41.348582),\n",
+        "    (-83.543223, 41.34858),\n",
+        "    (-83.54301799999999, 41.348569999999995),\n",
+        "    (-83.539478, 41.348569999999995),\n",
+        "    (-83.539298, 41.34858),\n",
+        "    (-83.539119, 41.348600999999995),\n",
+        "    (-83.538943, 41.348636),\n",
+        "    (-83.53877299999999, 41.348684999999996),\n",
+        "    (-83.538417, 41.348825999999995),\n",
+        "    (-83.53830599999999, 41.348856999999995),\n",
+        "    (-83.538133, 41.348887),\n",
+        "    (-83.537955, 41.348901999999995),\n",
+        "    (-83.53753499999999, 41.348912),\n",
+        "    (-83.53644899999999, 41.348912999999996),\n",
+        "    (-83.53397799999999, 41.348926),\n",
+        "    (-83.533773, 41.348932999999995),\n",
+        "    (-83.53376999999999, 41.348763),\n",
+        "    (-83.53378599999999, 41.347681),\n",
+        "    (-83.533789, 41.346736),\n",
+        "    (-83.533813, 41.3461),\n",
+        "    (-83.534212, 41.345998),\n",
+        "    (-83.535578, 41.345953),\n",
+        "    (-83.536245, 41.34609),\n",
+        "    (-83.537004, 41.346365),\n",
+        "    (-83.538946, 41.346776999999996),\n",
+        "    (-83.539552, 41.346846),\n",
+        "    (-83.54021999999999, 41.346686),\n",
+        "    (-83.540827, 41.346410999999996),\n",
+        "    (-83.54161599999999, 41.345701999999996),\n",
+        "    (-83.54355799999999, 41.343689999999995),\n",
+        "    (-83.545386, 41.341170999999996),\n",
+        "    (-83.545653, 41.340764),\n",
+        "    (-83.545744, 41.340466),\n",
+        "    (-83.54650099999999, 41.33998),\n",
+        "    (-83.547386, 41.339726999999996),\n",
+        "    (-83.54971599999999, 41.339362),\n",
+        "    (-83.550859, 41.339058),\n",
+        "    (-83.55227699999999, 41.338574),\n",
+        "    (-83.55257, 41.338387999999995),\n",
+        "    (-83.552566, 41.338353999999995),\n",
+        "    (-83.55257999999999, 41.338294),\n",
+        "    (-83.552604, 41.338254),\n",
+        "    (-83.55287299999999, 41.337958),\n",
+        "    (-83.552962, 41.33784),\n",
+        "    (-83.553009, 41.337758),\n",
+        "    (-83.553043, 41.337672999999995),\n",
+        "    (-83.553072, 41.33754),\n",
+        "    (-83.553083, 41.337406),\n",
+        "    (-83.553084, 41.336954),\n",
+        "    (-83.553134, 41.334613),\n",
+        "    (-83.553147, 41.333517),\n",
+        "    (-83.554118, 41.334407),\n",
+        "    (-83.554603, 41.335550999999995),\n",
+        "    (-83.554876, 41.335985),\n",
+        "    (-83.555362, 41.335938999999996),\n",
+        "    (-83.555847, 41.335802),\n",
+        "    (-83.55854699999999, 41.335642),\n",
+        "    (-83.561217, 41.335688),\n",
+        "    (-83.56264399999999, 41.335184999999996),\n",
+        "    (-83.562674, 41.334933),\n",
+        "    (-83.562432, 41.334544),\n",
+        "    (-83.56231, 41.333973),\n",
+        "    (-83.562158, 41.333766999999995),\n",
+        "    (-83.56218799999999, 41.33331),\n",
+        "    (-83.562643, 41.332623999999996),\n",
+        "    (-83.562552, 41.332029),\n",
+        "    (-83.562338, 41.331869),\n",
+        "    (-83.562428, 41.331526),\n",
+        "    (-83.562793, 41.331343),\n",
+        "    (-83.56294199999999, 41.325992),\n",
+        "    (-83.56253, 41.325995999999996),\n",
+        "    (-83.561694, 41.326008),\n",
+        "    (-83.560141, 41.326021),\n",
+        "    (-83.553271, 41.326025),\n",
+        "    (-83.55172, 41.326021999999995),\n",
+        "    (-83.550585, 41.326007),\n",
+        "    (-83.549809, 41.326014),\n",
+        "    (-83.544028, 41.326138),\n",
+        "    (-83.543689, 41.326145),\n",
+        "    (-83.53715199999999, 41.326287),\n",
+        "    (-83.53536, 41.326307),\n",
+        "    (-83.535062, 41.326298),\n",
+        "    (-83.534825, 41.326276),\n",
+        "    (-83.53459199999999, 41.326238),\n",
+        "    (-83.53424799999999, 41.326162),\n",
+        "    (-83.534087, 41.326119999999996),\n",
+        "    (-83.534157, 41.320484),\n",
+        "    (-83.534168, 41.319007),\n",
+        "    (-83.534171, 41.318593),\n",
+        "    (-83.53419, 41.317152),\n",
+        "    (-83.53419799999999, 41.315576),\n",
+        "    (-83.534261, 41.31155),\n",
+        "    (-83.534267, 41.311063999999995),\n",
+        "    (-83.534311, 41.307561),\n",
+        "    (-83.534322, 41.30612),\n",
+        "    (-83.53433799999999, 41.305535),\n",
+        "    (-83.534404, 41.30441),\n",
+        "    (-83.534416, 41.304013),\n",
+        "    (-83.534429, 41.303554999999996),\n",
+        "    (-83.53446, 41.300943),\n",
+        "    (-83.534481, 41.298286),\n",
+        "    (-83.534508, 41.297062),\n",
+        "    (-83.53489499999999, 41.297066),\n",
+        "    (-83.53558199999999, 41.297073),\n",
+        "    (-83.53814899999999, 41.297077),\n",
+        "    (-83.539463, 41.297073),\n",
+        "    (-83.54077699999999, 41.297061),\n",
+        "    (-83.54209, 41.297044),\n",
+        "    (-83.543931, 41.297014),\n",
+        "    (-83.54433399999999, 41.297008),\n",
+        "    (-83.545553, 41.296997),\n",
+        "    (-83.54758799999999, 41.296988999999996),\n",
+        "    (-83.550986, 41.296974999999996),\n",
+        "    (-83.55218099999999, 41.296966999999995),\n",
+        "    (-83.554036, 41.296943999999996),\n",
+        "    (-83.554555, 41.296938999999995),\n",
+        "    (-83.559286, 41.296893999999995),\n",
+        "    (-83.563345, 41.296841),\n",
+        "    (-83.56368599999999, 41.296838),\n",
+        "    (-83.565793, 41.296821),\n",
+        "    (-83.572592, 41.296745),\n",
+        "    (-83.57322599999999, 41.296738),\n",
+        "    (-83.57328299999999, 41.295186),\n",
+        "    (-83.57333799999999, 41.293341),\n",
+        "    (-83.573381, 41.292801),\n",
+        "    (-83.573438, 41.291182),\n",
+        "    (-83.573471, 41.289786),\n",
+        "    (-83.57346299999999, 41.289476),\n",
+        "    (-83.57610799999999, 41.289442),\n",
+        "    (-83.577422, 41.289432),\n",
+        "    (-83.579572, 41.289429999999996),\n",
+        "    (-83.581364, 41.289435999999995),\n",
+        "    (-83.582933, 41.289435),\n",
+        "    (-83.585664, 41.289434),\n",
+        "    (-83.59008399999999, 41.289426999999996),\n",
+        "    (-83.59255, 41.289432999999995),\n",
+        "    (-83.59258, 41.28853),\n",
+        "    (-83.592602, 41.28763),\n",
+        "    (-83.592714, 41.283758999999996),\n",
+        "    (-83.59273499999999, 41.283398),\n",
+        "    (-83.592832, 41.282455999999996),\n",
+        "    (-83.592838, 41.282258999999996),\n",
+        "    (-83.593257, 41.28226),\n",
+        "    (-83.59369199999999, 41.282261),\n",
+        "    (-83.596318, 41.282294),\n",
+        "    (-83.599363, 41.282337999999996),\n",
+        "    (-83.602361, 41.282388),\n",
+        "    (-83.602808, 41.282396),\n",
+        "    (-83.61035199999999, 41.282523),\n",
+        "    (-83.610674, 41.282528),\n",
+        "    (-83.610884, 41.282531999999996),\n",
+        "    (-83.612077, 41.282548),\n",
+        "    (-83.615302, 41.282557),\n",
+        "    (-83.616588, 41.282553),\n",
+        "    (-83.618228, 41.282548),\n",
+        "    (-83.619959, 41.282547),\n",
+        "    (-83.626528, 41.282523999999995),\n",
+        "    (-83.62808, 41.282512),\n",
+        "    (-83.631086, 41.282506),\n",
+        "    (-83.63202, 41.282516),\n",
+        "    (-83.634748, 41.282576),\n",
+        "    (-83.634819, 41.282421),\n",
+        "    (-83.634993, 41.280522999999995),\n",
+        "    (-83.635145, 41.279883),\n",
+        "    (-83.636147, 41.277871),\n",
+        "    (-83.636208, 41.275560999999996),\n",
+        "    (-83.63648099999999, 41.274967),\n",
+        "    (-83.636754, 41.274784),\n",
+        "    (-83.636754, 41.274623999999996),\n",
+        "    (-83.63824, 41.27307),\n",
+        "    (-83.638938, 41.272224),\n",
+        "    (-83.638999, 41.271401),\n",
+        "    (-83.638937, 41.270005999999995),\n",
+        "    (-83.639056, 41.269456999999996),\n",
+        "    (-83.638961, 41.268471),\n",
+        "    (-83.640428, 41.268513999999996),\n",
+        "    (-83.641144, 41.268526),\n",
+        "    (-83.645375, 41.268504),\n",
+        "    (-83.645376, 41.268654),\n",
+        "    (-83.645375, 41.27041),\n",
+        "    (-83.645382, 41.270685),\n",
+        "    (-83.645382, 41.270782),\n",
+        "    (-83.645382, 41.271294999999995),\n",
+        "    (-83.645382, 41.271567999999995),\n",
+        "    (-83.645393, 41.273301),\n",
+        "    (-83.645557, 41.273312999999995),\n",
+        "    (-83.64658999999999, 41.273317),\n",
+        "    (-83.646682, 41.273320999999996),\n",
+        "    (-83.647492, 41.273309999999995),\n",
+        "    (-83.647668, 41.273317),\n",
+        "    (-83.64778199999999, 41.273334),\n",
+        "    (-83.64794599999999, 41.273379999999996),\n",
+        "    (-83.64805, 41.273423),\n",
+        "    (-83.64809699999999, 41.273451),\n",
+        "    (-83.648303, 41.273551999999995),\n",
+        "    (-83.648539, 41.273694),\n",
+        "    (-83.64869, 41.27377),\n",
+        "    (-83.649715, 41.274240999999996),\n",
+        "    (-83.64982599999999, 41.274280999999995),\n",
+        "    (-83.650103, 41.274349),\n",
+        "    (-83.650341, 41.274428),\n",
+        "    (-83.650347, 41.275236),\n",
+        "    (-83.650363, 41.276271),\n",
+        "    (-83.650418, 41.282964),\n",
+        "    (-83.65043399999999, 41.2843),\n",
+        "    (-83.650466, 41.287079999999996),\n",
+        "    (-83.65047799999999, 41.288346999999995),\n",
+        "    (-83.65052399999999, 41.294644999999996),\n",
+        "    (-83.650551, 41.297536),\n",
+        "    (-83.650548, 41.298415999999996),\n",
+        "    (-83.65054599999999, 41.299149),\n",
+        "    (-83.650549, 41.3005),\n",
+        "    (-83.650545, 41.302375999999995),\n",
+        "    (-83.650544, 41.302842),\n",
+        "    (-83.650547, 41.304721),\n",
+        "    (-83.65131799999999, 41.304424),\n",
+        "    (-83.652016, 41.303807),\n",
+        "    (-83.653593, 41.303259),\n",
+        "    (-83.654533, 41.302596),\n",
+        "    (-83.654746, 41.302321),\n",
+        "    (-83.655292, 41.301314999999995),\n",
+        "    (-83.657489, 41.301279),\n",
+        "    (-83.665465, 41.301148999999995),\n",
+        "    (-83.664485, 41.302344),\n",
+        "    (-83.664369, 41.302487),\n",
+        "    (-83.66339699999999, 41.303858999999996),\n",
+        "    (-83.663292, 41.304048),\n",
+        "    (-83.66269799999999, 41.305116),\n",
+        "    (-83.660235, 41.31106),\n",
+        "    (-83.660144, 41.311586),\n",
+        "    (-83.660204, 41.311974),\n",
+        "    (-83.660198, 41.312168),\n",
+        "    (-83.661558, 41.312169),\n",
+        "    (-83.66284, 41.312176),\n",
+        "    (-83.663833, 41.312182),\n",
+        "    (-83.664073, 41.312174),\n",
+        "    (-83.66425, 41.312155),\n",
+        "    (-83.66448299999999, 41.312115),\n",
+        "    (-83.664999, 41.311997),\n",
+        "    (-83.66529, 41.311945),\n",
+        "    (-83.665527, 41.311915),\n",
+        "    (-83.66573, 41.311907),\n",
+        "    (-83.665852, 41.311910999999995),\n",
+        "    (-83.66602999999999, 41.311935),\n",
+        "    (-83.666145, 41.311963),\n",
+        "    (-83.66659299999999, 41.312103),\n",
+        "    (-83.66676799999999, 41.312137),\n",
+        "    (-83.666949, 41.312149),\n",
+        "    (-83.667157, 41.312141),\n",
+        "    (-83.667338, 41.312121999999995),\n",
+        "    (-83.667576, 41.312084),\n",
+        "    (-83.66781, 41.312031),\n",
+        "    (-83.668093, 41.311946),\n",
+        "    (-83.66856899999999, 41.311768),\n",
+        "    (-83.66868699999999, 41.311948),\n",
+        "    (-83.669229, 41.311704),\n",
+        "    (-83.67102, 41.311018),\n",
+        "    (-83.672294, 41.310857999999996),\n",
+        "    (-83.674509, 41.310331999999995),\n",
+        "    (-83.675389, 41.309988),\n",
+        "    (-83.67666299999999, 41.309325),\n",
+        "    (-83.677543, 41.309508),\n",
+        "    (-83.67836199999999, 41.309416999999996),\n",
+        "    (-83.679727, 41.309438),\n",
+        "    (-83.682002, 41.309667),\n",
+        "    (-83.68421699999999, 41.310215),\n",
+        "    (-83.684793, 41.310466),\n",
+        "    (-83.685582, 41.310604),\n",
+        "    (-83.68679499999999, 41.310627),\n",
+        "    (-83.68719, 41.310739999999996),\n",
+        "    (-83.688222, 41.31122),\n",
+        "    (-83.68879799999999, 41.31138),\n",
+        "    (-83.68894999999999, 41.311563),\n",
+        "    (-83.689404, 41.311567),\n",
+        "    (-83.689405, 41.312042999999996),\n",
+        "    (-83.689398, 41.312129),\n",
+        "    (-83.689397, 41.312221),\n",
+        "    (-83.68938, 41.312501999999995),\n",
+        "    (-83.68993499999999, 41.312512999999996),\n",
+        "    (-83.69008099999999, 41.312515999999995),\n",
+        "    (-83.696451, 41.312548),\n",
+        "    (-83.69776499999999, 41.312551),\n",
+        "    (-83.699557, 41.312565),\n",
+        "    (-83.702125, 41.312605999999995),\n",
+        "    (-83.70833499999999, 41.312743999999995),\n",
+        "    (-83.708556, 41.31274),\n",
+        "    (-83.708551, 41.313235),\n",
+        "    (-83.708569, 41.313995999999996),\n",
+        "    (-83.708592, 41.314671),\n",
+        "    (-83.70862, 41.316112),\n",
+        "    (-83.708629, 41.317417999999996),\n",
+        "    (-83.708649, 41.318903999999996),\n",
+        "    (-83.708681, 41.32057),\n",
+        "    (-83.708705, 41.322371),\n",
+        "    (-83.708714, 41.325569),\n",
+        "    (-83.708733, 41.327326),\n",
+        "    (-83.708147, 41.327310999999995),\n",
+        "    (-83.70420399999999, 41.327265),\n",
+        "    (-83.70079899999999, 41.327231999999995),\n",
+        "    (-83.698948, 41.327207),\n",
+        "    (-83.69422899999999, 41.32716),\n",
+        "    (-83.691732, 41.327109),\n",
+        "    (-83.69100399999999, 41.327092),\n",
+        "    (-83.690707, 41.327093999999995),\n",
+        "    (-83.689453, 41.327072),\n",
+        "    (-83.68937299999999, 41.327073),\n",
+        "    (-83.68938899999999, 41.327137),\n",
+        "    (-83.689405, 41.327600000000004),\n",
+        "    (-83.689036, 41.327701999999995),\n",
+        "    (-83.686776, 41.32842),\n",
+        "    (-83.685118, 41.328939),\n",
+        "    (-83.684499, 41.329104),\n",
+        "    (-83.68440199999999, 41.329124),\n",
+        "    (-83.68397999999999, 41.329209999999996),\n",
+        "    (-83.68247, 41.329491),\n",
+        "    (-83.679733, 41.33001),\n",
+        "    (-83.679756, 41.330431999999995),\n",
+        "    (-83.680604, 41.330433),\n",
+        "    (-83.68109, 41.330501999999996),\n",
+        "    (-83.681454, 41.330709),\n",
+        "    (-83.682425, 41.331029),\n",
+        "    (-83.683334, 41.331236),\n",
+        "    (-83.68430599999999, 41.331351),\n",
+        "    (-83.684187, 41.342703),\n",
+        "    (-83.682844, 41.342686),\n",
+        "    (-83.67587499999999, 41.342586999999995),\n",
+        "    (-83.674464, 41.331119),\n",
+        "    (-83.67444499999999, 41.331123999999996),\n",
+        "    (-83.67215, 41.331634),\n",
+        "    (-83.669851, 41.332163),\n",
+        "    (-83.669811, 41.335772999999996),\n",
+        "    (-83.669742, 41.340320999999996),\n",
+        "    (-83.669722, 41.341943),\n",
+        "    (-83.669731, 41.342454),\n",
+        "    (-83.669741, 41.342495),\n",
+        "    (-83.669641, 41.342487),\n",
+        "    (-83.66939599999999, 41.342486),\n",
+        "    (-83.669283, 41.342484999999996),\n",
+        "    (-83.66713299999999, 41.342451),\n",
+        "    (-83.66587799999999, 41.342436),\n",
+        "    (-83.66354799999999, 41.342400999999995),\n",
+        "    (-83.66303599999999, 41.342391),\n",
+        "    (-83.661756, 41.342365),\n",
+        "    (-83.66118999999999, 41.342355999999995),\n",
+        "    (-83.65997399999999, 41.342335),\n",
+        "    (-83.659835, 41.335434),\n",
+        "    (-83.659821, 41.33471),\n",
+        "    (-83.65959099999999, 41.334714999999996),\n",
+        "    (-83.653465, 41.334689999999995),\n",
+        "    (-83.650583, 41.334666999999996),\n",
+        "    (-83.650409, 41.334669),\n",
+        "    (-83.650409, 41.335947),\n",
+        "    (-83.650229, 41.335947),\n",
+        "    (-83.64766399999999, 41.335967),\n",
+        "    (-83.647674, 41.334756),\n",
+        "    (-83.64583999999999, 41.334751999999995),\n",
+        "    (-83.64585, 41.332761),\n",
+        "    (-83.645659, 41.332761),\n",
+        "    (-83.64567799999999, 41.337637),\n",
+        "    (-83.645698, 41.340424999999996),\n",
+        "    (-83.645696, 41.340925),\n",
+        "    (-83.644426, 41.340869),\n",
+        "    (-83.643873, 41.340247999999995),\n",
+        "    (-83.643244, 41.339797),\n",
+        "    (-83.64223299999999, 41.339475),\n",
+        "    (-83.630608, 41.339087),\n",
+        "    (-83.62995699999999, 41.338468999999996),\n",
+        "    (-83.62922999999999, 41.337756999999996),\n",
+        "    (-83.629099, 41.337987999999996),\n",
+        "    (-83.628974, 41.338241),\n",
+        "    (-83.62863999999999, 41.338964999999995),\n",
+        "    (-83.628421, 41.339383999999995),\n",
+        "    (-83.627895, 41.340292999999996),\n",
+        "    (-83.62714299999999, 41.341569),\n",
+        "    (-83.62705299999999, 41.341752),\n",
+        "    (-83.625078, 41.341719)]],\n",
+        "  'type': 'Polygon'},\n",
+        " 'id': '0',\n",
+        " 'properties': OrderedDict([(u'ZCTA5CE10', u'43451'), (u'GEOID10', u'43451'), (u'CLASSFP10', u'B5'), (u'MTFCC10', u'G6350'), (u'FUNCSTAT10', u'S'), (u'ALAND10', 63411475.0), (u'AWATER10', 157689.0), (u'INTPTLAT10', u'+41.3183010'), (u'INTPTLON10', u'-083.6174935')]),\n",
+        " 'type': 'Feature'}"
+       ]
+      }
+     ],
+     "prompt_number": 39
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "The coordinates that define this shape are stored as an object in `shape['geometry']`, and the ZIP code of the shape is stored in `shape['properties']['ZCTA5CE10']`. \n",
+      "\n",
+      "Before we loop over all the shapes to check whether any of our `zip_car_locations` are within them, just how may shapes are in this file?"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "import collections\n",
+      "cnt = collections.Counter()\n",
+      "\n",
+      "for shape in zip_code_shapefile:\n",
+      "    cnt[shape['geometry']['type']] += 1\n",
+      "\n",
+      "cnt"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 40,
+       "text": [
+        "Counter({'Polygon': 28899, 'MultiPolygon': 4245})"
+       ]
+      }
+     ],
+     "prompt_number": 40
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Looping over close to 30k polygons will be no fun in the single-threaded iPython environment. We will use a trick to speed up this task. Massachuesetts is contianed within the bounding box 74\u02daW to 69\u02daW and 41\u02daN to 43\u02daN. Fiona can use some geo-indexing features available in the SHP file format to quickly filter a collection with a bounding box of coordinates:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "zip_codes_ma = zip_code_shapefile.filter(( -74, 41, -69, 43 ))"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [],
+     "prompt_number": 41
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Lets see if this filtering helped us, then reset the Fiona collection:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "cnt = collections.Counter()\n",
+      "\n",
+      "for shape in zip_codes_ma:\n",
+      "    cnt[shape['geometry']['type']] += 1\n",
+      "\n",
+      "zip_codes_ma = zip_code_shapefile.filter(( -74, 41, -69, 43 ))\n",
+      "cnt"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "metadata": {},
+       "output_type": "pyout",
+       "prompt_number": 42,
+       "text": [
+        "Counter({'Polygon': 1105, 'MultiPolygon': 175})"
+       ]
+      }
+     ],
+     "prompt_number": 42
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "It certainly did! Lets get those ZIP codes:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "for element in zip_codes_ma:\n",
+      "    zip_code_poly = shapely.geometry.shape(element['geometry'])\n",
+      "    for zc_location_id, zc_point in zip_car_points.iteritems():\n",
+      "        if (zip_car_locations.loc[zc_location_id, 'zip_code'] == np.str) and zip_code_poly.contains(zc_point):\n",
+      "            zip_car_locations.loc[zc_location_id, 'zip_code'] = element['properties']['ZCTA5CE10']"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [],
+     "prompt_number": 35
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Let's make sure that ZIP codes got saved in the `zip_car_locations` dataframe, and make sure that no Zip Car locations were left blank:"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "print zip_car_locations.head()\n",
+      "print len( zip_car_locations[zip_car_locations.zip_code == np.str].index )"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "output_type": "stream",
+       "stream": "stdout",
+       "text": [
+        "                               description  hasVans   latitude  longitude  \\\n",
+        "locationId                                                                  \n",
+        "49271126                       Riverside T        0  42.336709 -71.253054   \n",
+        "1262234042             Watch Factory Lofts        0  42.368277 -71.241841   \n",
+        "49271012                        Woodland T        0  42.332116 -71.241346   \n",
+        "391795896       Archstone Cronin's Landing        0  42.371949 -71.237892   \n",
+        "1053595252  64 Pine St/Donovan's Alignment        0  42.371203 -71.233723   \n",
+        "\n",
+        "            vehicleCount zip_code  \n",
+        "locationId                         \n",
+        "49271126               2    02466  \n",
+        "1262234042             2    02453  \n",
+        "49271012               2    02466  \n",
+        "391795896              2    02453  \n",
+        "1053595252             1    02453  \n",
+        "2\n"
+       ]
+      }
+     ],
+     "prompt_number": 32
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "Every worked as expected. We now have a ZIP code assigned to every ZipCar location in the state.\n",
+      "\n",
+      "***TODO:** Figure out why 2 ZIP Codes were not matched.*"
+     ]
+    },
+    {
+     "cell_type": "heading",
+     "level": 2,
+     "metadata": {},
+     "source": [
+      "Merging ZipCar locations and Performance Data"
+     ]
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "We now have a pretty sticky problem to deal with: We have one data set with performance measures for the ZipCar fleet, down to the ZIP Code level. We also have the a the precise locations for all ZipCars that existed on a random day after the performance data was captured. We saw above that the ZipCar Location dataset has more than twice as many vehicles in it as does the Performance dataset published by ZipCar.\n",
+      "\n",
+      "One potential explaination is that the Location dataset includes ZipVans; maybe these were filtered out of the Performance dataset before publication. How many vehicles are listed at a location that has some vans?"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [
+      "print \"Locations with ZipVans: {0}\".format( len(zip_car_locations[zip_car_locations.hasVans == 1].index) )\n",
+      "print \"Vehicles at a ZipVans Location: {0}\".format( zip_car_locations[zip_car_locations.hasVans == 1].vehicleCount.sum() )\n",
+      "print \n",
+      "print \"Total Locations: {0}\".format( len(zip_car_locations.index) )\n",
+      "print \"Total Vehicles: {0}\".format( zip_car_locations.vehicleCount.sum() )"
+     ],
+     "language": "python",
+     "metadata": {},
+     "outputs": [
+      {
+       "output_type": "stream",
+       "stream": "stdout",
+       "text": [
+        "Locations with ZipVans: 13\n",
+        "Vehicles at a ZipVans Location: 35\n",
+        "\n",
+        "Total Locations: 380\n",
+        "Total Vehicles: 862\n"
+       ]
+      }
+     ],
+     "prompt_number": 27
+    },
+    {
+     "cell_type": "markdown",
+     "metadata": {},
+     "source": [
+      "There are very few ZipVans in the location dataset, so we will just ignore them.\n",
+      "\n",
+      "The simplest strategy to merge these datasets is to assign every vehicle in a given location the average miles driven per quarter for its ZIP Code, derived from the Performance dataset. This will mean that our new data set will represent more than twice as many miles of usage than our Q4 2013 dataset, **but we are looking for relative differences between ZipCar locations**, so this is not really a problem. "
+     ]
+    },
+    {
+     "cell_type": "heading",
+     "level": 1,
+     "metadata": {},
+     "source": [
+      "...To Be Continued!"
+     ]
+    },
+    {
+     "cell_type": "code",
+     "collapsed": false,
+     "input": [],
+     "language": "python",
+     "metadata": {},
+     "outputs": []
+    }
+   ],
+   "metadata": {}
+  }
+ ]
+}
